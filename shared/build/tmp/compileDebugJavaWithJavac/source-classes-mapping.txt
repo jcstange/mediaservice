@@ -1,2 +1,0 @@
-com/example/mediaservice/shared/BuildConfig.java
- com.example.mediaservice.shared.BuildConfig

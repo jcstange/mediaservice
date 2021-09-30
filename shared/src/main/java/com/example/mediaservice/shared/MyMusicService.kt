@@ -1,6 +1,7 @@
 package com.example.mediaservice.shared
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaBrowserCompat.MediaItem
@@ -10,6 +11,10 @@ import androidx.media.MediaBrowserServiceCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
+import android.util.TypedValue
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.net.URI
 
 import java.util.ArrayList
 
@@ -168,19 +173,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return
         }
 
-        val mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+        var mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
 
         if(MY_MEDIA_ROOT_ID == parentMediaId) {
             // Build the MediaItem objects for the top level,
             // and put them in the mediaItems list...
-            val mediaDescription = MediaDescriptionCompat.Builder()
-                .setTitle("TestTitle")
-                .setDescription("Media description")
-                .setSubtitle("Subtitle")
-                .setMediaId("Fuck me")
-                .build()
-            val mediaItem = MediaItem(mediaDescription, FLAG_PLAYABLE)
-            mediaItems.add(mediaItem)
+            val type = object: TypeToken<List<MediaListItem>>(){}.type
+            val list = Gson().fromJson<List<MediaListItem>>(mockMediaList, type)
+            val mediaDescriptionList: List<MediaItem> = list.map {
+                val mediaDescription = MediaDescriptionCompat.Builder()
+                    .setTitle(it.title)
+                    .setDescription(it.description)
+                    .setSubtitle(it.subtitle)
+                    .setMediaId(it.mediaId)
+                    .setIconUri(Uri.parse(it.cover))
+                    .build()
+                MediaItem(mediaDescription, FLAG_PLAYABLE)
+            }
+            mediaItems = mediaDescriptionList.toMutableList()
         } else {
             // Examine the passed parentMediaId to see which submenu we're at,
             // and put the children of that menu in the mediaItems list...
@@ -188,4 +198,52 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(mediaItems)
     }
 }
+
+data class MediaListItem(
+    val mediaId: String,
+    val title: String,
+    val description: String,
+    val cover: String,
+    val subtitle: String
+)
+
+val mockMediaList = """
+    [
+        {
+            "mediaId": "00",
+            "title": "Nirvana",
+            "description": "Nevermind",
+            "cover": "https://upload.wikimedia.org/wikipedia/en/b/b7/NirvanaNevermindalbumcover.jpg",
+            "subtitle": "Grunge"
+        },
+        {
+            "mediaId": "01",
+            "title": "Red Hot Chilli Peppers",
+            "description": "One Hot Minute",
+            "cover": "https://upload.wikimedia.org/wikipedia/en/8/8a/Rhcp7.jpg",
+            "subtitle": "Rock"
+        },
+        {
+            "mediaId": "02",
+            "title": "Metallica",
+            "description": "Black Album",
+            "cover": "https://upload.wikimedia.org/wikipedia/en/2/2c/Metallica_-_Metallica_cover.jpg",
+            "subtitle": "Heavy Metal"
+        },
+        {
+            "mediaId": "03",
+            "title": "Stone Temple Pilots",
+            "description": "Purple",
+            "cover": "https://upload.wikimedia.org/wikipedia/en/3/36/Stonetemplepilotspurple.jpeg",
+            "subtitle": "Rock"
+        },
+        {
+            "mediaId": "04",
+            "title": "Alice in Chains",
+            "description": "Jar of files",
+            "cover": "https://upload.wikimedia.org/wikipedia/en/1/15/Alice_in_Chains_Jar_of_Flies.jpg",
+            "subtitle": "Rock"
+        }
+    ]
+""".trimIndent()
 

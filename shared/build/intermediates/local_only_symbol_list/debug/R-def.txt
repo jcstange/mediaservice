@@ -1,7 +1,0 @@
-R_DEF: Internal format may change without notice
-local
-color primaryDark
-drawable notification_icon
-drawable pause
-string pause
-xml automotive_app_desc

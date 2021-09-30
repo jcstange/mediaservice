@@ -11,30 +11,40 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.mediaservice.shared.MyMusicService
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.MutableLiveData
+import com.example.mediaservice.ui.ComposeTheme
+import com.example.mediaservice.ui.GrayBackground
+import com.example.mediaservice.ui.Shapes
+import com.google.accompanist.glide.rememberGlidePainter
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import com.example.mediaservice.ui.Purple200
 
-private var rootItems : MutableLiveData<MutableList<Item>> = MutableLiveData(mutableListOf())
+private var rootItems = MutableLiveData<MutableList<Item>>(mutableListOf())
 
 class MainActivity : ComponentActivity() {
     private lateinit var browser : MediaBrowserCompat
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         rootItems.observe(this, {
-            Log.d("rootItems", "updated")
+            Log.d("rootItems", "size ${rootItems.value?.size}")
         })
         setContent {
             DefaultPreview()
@@ -167,13 +177,16 @@ class MainActivity : ComponentActivity() {
         ) {
             super.onChildrenLoaded(parentId, children)
             Log.d("onChildrenLoaded","parentId: $parentId")
-            children.forEach {
-                rootItems.value?.add(Item(
+            val mediaItems = children.map {
+                Log.d("MediaItem","${it.mediaId}")
+                Item(
                     it.description.title.toString(),
                     it.description.description.toString(),
-                    it.description.subtitle.toString()
-                ))
-            }
+                    it.description.subtitle.toString(),
+                    it.description.iconUri.toString()
+                )
+            }.toMutableList()
+            rootItems.postValue(mediaItems)
 
         }
 
@@ -198,101 +211,106 @@ class MainActivity : ComponentActivity() {
 data class Item(
     val title: String,
     val description: String,
-    val subtitle: String
+    val subtitle: String,
+    val cover: String
 )
 
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
     Log.d("DefaultPreview", "Rendering")
+    val _rootItems: List<Item> by rootItems.observeAsState(listOf())
     ComposeTheme {
-        Surface(
-
-        ) {
-            Box() {
-                if(rootItems.value?.size == 0) {
-                    HelloWorld("Hello World")
+        Surface() {
+            Box(Modifier.fillMaxWidth().fillMaxHeight()) {
+                if(_rootItems.size == 0) {
+                    EmptyList(name = "Empty List")
                 } else {
-                    rootItems.value?.forEach {
-                        ListItem(it)
+                    LazyColumn() {
+                        items(_rootItems) { rootItem ->
+                            ListItem(rootItem)
+                        }
                     }
                 }
-
             }
         }
       }
 }
 
 @Composable
-fun HelloWorld(name: String) {
-    Log.d("HelloWorld", "Rendering")
-    Text(
-        text = name
-    )
-}
-
-@Composable
-fun ComposeTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable() () -> Unit
-) {
-    val colors = if(darkTheme) {
-        DarkColorPalette
-    } else {
-        LightColorPalette
+fun EmptyList(name: String) {
+    Box(
+        Modifier
+            .fillMaxSize()
+    ) {
+        Text(
+            text = name,
+            Modifier.align(Alignment.Center),
+            style = MaterialTheme.typography.body1,
+            textAlign = TextAlign.Center
+        )
     }
-
-    MaterialTheme(
-        colors = colors,
-        typography = Typography,
-        shapes = Shapes,
-        content = content
-    )
 }
 
 @Preview(showBackground = true)
 @Composable
 fun ListItem(
-    item: Item
+    @PreviewParameter(ItemPreviewParameterProvider::class) item: Item
 ) {
     Log.d("ListItem", "Rendering")
-    Box() {
-        Column() {
-            Text(item.title)
-            Text(item.description)
-            Text(item.subtitle)
+    Box(Modifier
+        .padding(10.dp)
+        .fillMaxWidth()
+        .border(
+            color= Color.Transparent,
+            shape = Shapes.medium,
+            width = 1.dp
+        )
+        .background(color= GrayBackground)
+    ) {
+        Row(){
+            Image(
+                painter = rememberGlidePainter(item.cover),
+                contentDescription = "Album cover"
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(
+                Modifier
+                    .padding(top= 6.dp)
+                    .fillMaxHeight(),
+                verticalArrangement= Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text= item.title,
+                    style= MaterialTheme.typography.body1
+                )
+                Text(
+                    text= item.description,
+                    style= MaterialTheme.typography.body2
+                )
+                Text(
+                    text= item.subtitle,
+                    style= MaterialTheme.typography.body2
+                )
+            }
         }
     }
 }
 
-val Shapes = Shapes(
-    small = RoundedCornerShape(4.dp),
-    medium = RoundedCornerShape(4.dp),
-    large = RoundedCornerShape(0.dp)
-)
-
-val Typography = Typography(
-    body1 = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        color = Color.White,
-        fontSize = 16.sp
+class ItemPreviewParameterProvider : PreviewParameterProvider<Item> {
+    override val values = sequenceOf(
+        Item(
+            "Title 1",
+            "Description 1",
+            "Subtitle 1",
+            "https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg"
+        ),
+        Item(
+            "Title 2",
+            "Description 2",
+            "Subtitle 2",
+            "https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg"
+        ),
     )
-)
+}
 
-val Purple200 = Color(0xFFBB86FC)
-val Purple500 = Color(0xFF6200EE)
-val Purple700 = Color(0xFF3700B3)
-val Teal200 = Color(0xFF03DAC5)
-
-private val DarkColorPalette = darkColors(
-    primary = Purple200,
-    primaryVariant = Purple700,
-    secondary = Teal200
-)
-
-private val LightColorPalette = darkColors(
-    primary = Purple500,
-    primaryVariant = Purple700,
-    secondary = Teal200
-)
