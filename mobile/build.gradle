@@ -63,6 +63,9 @@ dependencies {
     implementation "com.google.accompanist:accompanist-glide:0.10.0"
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.3.1'
 
+    // koin
+    implementation 'io.insert-koin:koin-android:3.1.2'
+
     implementation project(path: ':shared')
 
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_version"

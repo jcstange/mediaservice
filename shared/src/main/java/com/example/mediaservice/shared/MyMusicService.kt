@@ -1,19 +1,23 @@
 package com.example.mediaservice.shared
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
-import android.support.v4.media.MediaBrowserCompat
+import android.provider.MediaStore
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
 import android.support.v4.media.MediaDescriptionCompat
+import android.support.v4.media.MediaMetadataCompat
 import androidx.media.MediaBrowserServiceCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
-import android.util.TypedValue
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import java.net.URI
 
 import java.util.ArrayList
@@ -75,6 +79,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private lateinit var context : Context
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var stateBuilder: PlaybackStateCompat.Builder
+    private lateinit var mediaPlayer: MediaPlayer
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
@@ -87,6 +92,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     mediaSession
                 ).build()
             )
+            mediaPlayer = MediaPlayer().apply  {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                setDataSource(mediaSession.controller.extras.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI))
+                prepareAsync() // might take long! (for buffering, etc)
+                start()
+            }
+
         }
 
         override fun onSkipToQueueItem(queueId: Long) {
@@ -107,6 +124,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onStop() {
             Log.v("Debug => ", "onStop")
+            mediaPlayer.release()
         }
 
         override fun onSkipToNext() {
@@ -153,13 +171,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?
-    ): MediaBrowserServiceCompat.BrowserRoot? {
+    ): BrowserRoot? {
         val browsing = true
         //return if(allowBrowsing(clientPackageName, clientUid)){
         return if(browsing){
-            MediaBrowserServiceCompat.BrowserRoot(MY_MEDIA_ROOT_ID, null)
+            BrowserRoot(MY_MEDIA_ROOT_ID, null)
         } else {
-            MediaBrowserServiceCompat.BrowserRoot(MY_EMPTY_MEDIA_ROOT_ID, null)
+            BrowserRoot(MY_EMPTY_MEDIA_ROOT_ID, null)
         }
     }
 
@@ -167,26 +185,28 @@ class MyMusicService : MediaBrowserServiceCompat() {
         parentMediaId: String,
         result: Result<MutableList<MediaItem>>
     ) {
-        //result.sendResult(ArrayList())
         if(MY_EMPTY_MEDIA_ROOT_ID == parentMediaId) {
             result.sendResult(null)
             return
         }
 
-        var mediaItems = mutableListOf<MediaBrowserCompat.MediaItem>()
+        var mediaItems = mutableListOf<MediaItem>()
 
         if(MY_MEDIA_ROOT_ID == parentMediaId) {
             // Build the MediaItem objects for the top level,
-            // and put them in the mediaItems list...
-            val type = object: TypeToken<List<MediaListItem>>(){}.type
-            val list = Gson().fromJson<List<MediaListItem>>(mockMediaList, type)
-            val mediaDescriptionList: List<MediaItem> = list.map {
+            // and put them in the mediaItems list.
+            val moshi = Moshi.Builder().build()
+            val adapter = moshi.adapter(MusicCatalogResponse::class.java)
+            val list = adapter.fromJson(mockMediaList)
+
+            val mediaDescriptionList = list!!.music.map {
                 val mediaDescription = MediaDescriptionCompat.Builder()
                     .setTitle(it.title)
-                    .setDescription(it.description)
-                    .setSubtitle(it.subtitle)
-                    .setMediaId(it.mediaId)
-                    .setIconUri(Uri.parse(it.cover))
+                    .setDescription(it.album)
+                    .setSubtitle(it.trackNumber.toString())
+                    .setMediaId(it.id)
+                    .setIconUri(Uri.parse(it.image))
+                    .setMediaUri(Uri.parse(it.source))
                     .build()
                 MediaItem(mediaDescription, FLAG_PLAYABLE)
             }
@@ -198,52 +218,3 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(mediaItems)
     }
 }
-
-data class MediaListItem(
-    val mediaId: String,
-    val title: String,
-    val description: String,
-    val cover: String,
-    val subtitle: String
-)
-
-val mockMediaList = """
-    [
-        {
-            "mediaId": "00",
-            "title": "Nirvana",
-            "description": "Nevermind",
-            "cover": "https://upload.wikimedia.org/wikipedia/en/b/b7/NirvanaNevermindalbumcover.jpg",
-            "subtitle": "Grunge"
-        },
-        {
-            "mediaId": "01",
-            "title": "Red Hot Chilli Peppers",
-            "description": "One Hot Minute",
-            "cover": "https://upload.wikimedia.org/wikipedia/en/8/8a/Rhcp7.jpg",
-            "subtitle": "Rock"
-        },
-        {
-            "mediaId": "02",
-            "title": "Metallica",
-            "description": "Black Album",
-            "cover": "https://upload.wikimedia.org/wikipedia/en/2/2c/Metallica_-_Metallica_cover.jpg",
-            "subtitle": "Heavy Metal"
-        },
-        {
-            "mediaId": "03",
-            "title": "Stone Temple Pilots",
-            "description": "Purple",
-            "cover": "https://upload.wikimedia.org/wikipedia/en/3/36/Stonetemplepilotspurple.jpeg",
-            "subtitle": "Rock"
-        },
-        {
-            "mediaId": "04",
-            "title": "Alice in Chains",
-            "description": "Jar of files",
-            "cover": "https://upload.wikimedia.org/wikipedia/en/1/15/Alice_in_Chains_Jar_of_Flies.jpg",
-            "subtitle": "Rock"
-        }
-    ]
-""".trimIndent()
-
