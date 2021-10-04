@@ -1,7 +1,6 @@
 package com.example.mediaservice
 
 import android.os.Bundle
-import android.support.v4.media.session.MediaControllerCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*

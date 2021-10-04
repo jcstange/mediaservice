@@ -1,8 +1,15 @@
 package com.example.mediaservice.shared
 
+import android.app.NotificationChannel
+import android.app.NotificationChannel.DEFAULT_CHANNEL_ID
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -14,10 +21,15 @@ import androidx.media.MediaBrowserServiceCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
+import androidx.media.session.MediaButtonReceiver
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.request.RequestOptions
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import kotlinx.coroutines.*
 import java.net.URI
 
 import java.util.ArrayList
@@ -70,6 +82,7 @@ import java.util.ArrayList
  *
  */
 
+private const val MY_CHANNEL = "notification_channel"
 private const val MY_MEDIA_ROOT_ID = "media_root_id"
 private const val MY_EMPTY_MEDIA_ROOT_ID = "empty_root_id"
 private const val ON_GOING_NOTIFICATION_ID = 1
@@ -79,32 +92,56 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private lateinit var context : Context
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var stateBuilder: PlaybackStateCompat.Builder
-    private lateinit var mediaPlayer: MediaPlayer
+    private var mediaPlayer: MediaPlayer? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        context = this
+
+        createNotificationChannel()
+
+        mediaSession = MediaSessionCompat(this, "MyMusicService").apply {
+            stateBuilder = PlaybackStateCompat.Builder()
+                .setActions(PlaybackStateCompat.ACTION_PLAY
+                        or PlaybackStateCompat.ACTION_PLAY_PAUSE
+                        or PlaybackStateCompat.ACTION_PAUSE
+                        or PlaybackStateCompat.ACTION_STOP
+                )
+            setPlaybackState(stateBuilder.build())
+            setCallback(callback)
+            setSessionToken(sessionToken)
+            MediaButtonReceiver.handleIntent(this, Intent(Intent.ACTION_MEDIA_BUTTON))
+        }
+
+    }
+
+    override fun onDestroy() {
+        mediaSession.release()
+    }
+
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            MY_CHANNEL,
+            MY_CHANNEL,
+            NotificationManager.IMPORTANCE_LOW
+        )
+        channel.lightColor = Color.GREEN
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
             Log.v("Debug => ", "onPlay")
-            startForeground(
-                ON_GOING_NOTIFICATION_ID,
-                myMusicServiceNotificationBuilder(
-                    context,
-                    "dummy",
-                    mediaSession
-                ).build()
-            )
-            val mediaUri = mediaSession.controller.extras.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
+            val mediaUri = mediaSession.controller.metadata.description.mediaUri
             Log.v("On Play => ", "mediaUri = ${mediaUri}")
-            mediaPlayer = MediaPlayer().apply  {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                setDataSource(mediaSession.controller.extras.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI))
-                prepareAsync() // might take long! (for buffering, etc)
-                start()
-            }
+            mediaPlayer?.start()
+            stateBuilder.setState(
+                PlaybackStateCompat.STATE_PLAYING,
+                mediaPlayer!!.currentPosition.toLong(),
+                1f
+            )
+            mediaSession.setPlaybackState(stateBuilder.build())
 
         }
 
@@ -118,12 +155,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
             Log.v("Debug => ", "onPlayFromMediaId")
+
+            if(mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+                return
+            }
             val mediaTitle = extras?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
             val mediaUri = extras?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
             val artist = extras?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
             val album = extras?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
             val albumURI = extras?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
-            Log.v("On Play => ", "mediaUri = ${mediaUri}")
+            Log.v("On Play => ", "mediaStringUri = ${mediaUri}")
+            Log.v("On Play => ", "albumUri = ${albumURI}")
             mediaSession.setMetadata(
                 MediaMetadataCompat.Builder().apply {
                     putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, mediaUri)
@@ -146,6 +189,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 setDataSource(mediaUri)
                 setOnPreparedListener {
                     it.start()
+                    stateBuilder.setState(
+                        PlaybackStateCompat.STATE_PLAYING,
+                        mediaPlayer!!.currentPosition.toLong(),
+                        1f
+                    )
+                    mediaSession.setPlaybackState(stateBuilder.build())
                 }
                 prepareAsync() // might take long! (for buffering, etc)
             }
@@ -154,7 +203,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 ON_GOING_NOTIFICATION_ID,
                 myMusicServiceNotificationBuilder(
                     context,
-                    "dummy",
+                    MY_CHANNEL,
                     mediaSession
                 ).build()
             )
@@ -163,11 +212,27 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPause() {
             Log.v("Debug => ", "onPause")
+            if(mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.pause()
+                stateBuilder.setState(
+                    PlaybackStateCompat.STATE_PAUSED,
+                    mediaPlayer!!.currentPosition.toLong(),
+                    1f
+                )
+                mediaSession.setPlaybackState(stateBuilder.build())
+            }
         }
 
         override fun onStop() {
             Log.v("Debug => ", "onStop")
-            mediaPlayer.release()
+            stateBuilder.setState(
+                PlaybackStateCompat.STATE_STOPPED,
+                mediaPlayer!!.currentPosition.toLong(),
+                1f
+            )
+            mediaSession.setPlaybackState(stateBuilder.build())
+            mediaPlayer?.release()
+
         }
 
         override fun onSkipToNext() {
@@ -187,28 +252,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    override fun onCreate() {
-        super.onCreate()
-        context = this
-
-        mediaSession = MediaSessionCompat(this, "MyMusicService").apply {
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                        MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-            )
-            stateBuilder = PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY
-                        or PlaybackStateCompat.ACTION_PLAY_PAUSE
-                )
-            setPlaybackState(stateBuilder.build())
-            setCallback(callback)
-            setSessionToken(sessionToken)
-        }
-    }
-
-    override fun onDestroy() {
-        mediaSession.release()
-    }
 
     override fun onGetRoot(
         clientPackageName: String,
@@ -260,5 +303,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         result.sendResult(mediaItems)
     }
+
 
 }

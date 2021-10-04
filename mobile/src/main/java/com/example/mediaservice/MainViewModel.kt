@@ -2,6 +2,7 @@ package com.example.mediaservice
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.MediaRouter2
 import android.os.Bundle
 import android.os.RemoteException
 import android.support.v4.media.MediaBrowserCompat
@@ -13,9 +14,14 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.mediaservice.models.MusicItem
 import com.example.mediaservice.network.Repository
 import com.example.mediaservice.shared.MyMusicService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(
     repository: Repository
@@ -25,6 +31,8 @@ class MainViewModel(
     val rootItems : LiveData<MutableList<MusicItem>> = _rootItems
     lateinit var browser : MediaBrowserCompat
     lateinit var controller : MediaControllerCompat
+    var mediaBrowserCallback : MediaBrowserCompat.ConnectionCallback? = null
+    var controllerCallback : MediaControllerCompat.Callback? = null
 
     fun instantiateBrowser(context: Context) {
         browser = MediaBrowserCompat(
@@ -46,7 +54,7 @@ class MainViewModel(
     fun play(item: MusicItem) {
         Log.d("MainViewModel","playing -> ${item.title}")
         controller.transportControls.playFromMediaId(item.mediaId, Bundle().apply {
-            putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, item.cover)
+            putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, item.cover)
             putString(MediaMetadataCompat.METADATA_KEY_ARTIST, item.subtitle)
             putString(MediaMetadataCompat.METADATA_KEY_TITLE, item.title)
             putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, item.source.toString())
@@ -116,7 +124,7 @@ class MainViewModel(
         }
     }
 
-    fun configControllerCallback(context: Context) =  object: MediaControllerCompat.Callback() {
+    fun configControllerCallback(context: Context) = object: MediaControllerCompat.Callback() {
         override fun binderDied() {
             super.binderDied()
             Log.d("controllerCallback", "binderDied")
@@ -127,8 +135,6 @@ class MainViewModel(
             Log.d("controllerCallback", "onSessionReady")
             Log.d("controllerCallback", "${MediaControllerCompat.getMediaController(context as MainActivity)?.playbackState}")
             subscribe(browser.root, browser)
-
-
         }
 
         override fun onSessionDestroyed() {
@@ -186,6 +192,12 @@ class MainViewModel(
             super.onShuffleModeChanged(shuffleMode)
             Log.d("controllerCallback", "onShuffleModeChanged")
         }
+    }
+
+    var userData: String? = null
+    suspend fun checkSessionExpiry() = withContext(Dispatchers.IO) {
+        delay(5000)
+        userData = "some_user_data"
     }
 }
 
