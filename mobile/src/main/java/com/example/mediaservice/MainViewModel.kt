@@ -50,6 +50,7 @@ class MainViewModel(
             putString(MediaMetadataCompat.METADATA_KEY_ARTIST, item.subtitle)
             putString(MediaMetadataCompat.METADATA_KEY_TITLE, item.title)
             putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, item.source.toString())
+            putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, item.mediaId)
         })
     }
 
@@ -147,6 +148,7 @@ class MainViewModel(
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
             super.onMetadataChanged(metadata)
+
             Log.d("controllerCallback", "onMetadataChanged")
         }
 

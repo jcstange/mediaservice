@@ -92,6 +92,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     mediaSession
                 ).build()
             )
+            val mediaUri = mediaSession.controller.extras.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
+            Log.v("On Play => ", "mediaUri = ${mediaUri}")
             mediaPlayer = MediaPlayer().apply  {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -116,6 +118,47 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
             Log.v("Debug => ", "onPlayFromMediaId")
+            val mediaTitle = extras?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
+            val mediaUri = extras?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
+            val artist = extras?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
+            val album = extras?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
+            val albumURI = extras?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI)
+            Log.v("On Play => ", "mediaUri = ${mediaUri}")
+            mediaSession.setMetadata(
+                MediaMetadataCompat.Builder().apply {
+                    putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, mediaUri)
+                    putString(MediaMetadataCompat.METADATA_KEY_TITLE, mediaTitle)
+                    putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                    putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                    putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, albumURI)
+                    putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, albumURI)
+                    putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, artist)
+                    putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, album)
+                }.build()
+            )
+            mediaPlayer = MediaPlayer().apply  {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                setDataSource(mediaUri)
+                setOnPreparedListener {
+                    it.start()
+                }
+                prepareAsync() // might take long! (for buffering, etc)
+            }
+
+            startForeground(
+                ON_GOING_NOTIFICATION_ID,
+                myMusicServiceNotificationBuilder(
+                    context,
+                    "dummy",
+                    mediaSession
+                ).build()
+            )
+
         }
 
         override fun onPause() {
@@ -217,4 +260,5 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         result.sendResult(mediaItems)
     }
+
 }

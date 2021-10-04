@@ -1,6 +1,8 @@
 package com.example.mediaservice.shared
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
@@ -17,6 +19,7 @@ fun myMusicServiceNotificationBuilder(
     val description = mediaMetaData.description
 
     return NotificationCompat.Builder(context, channelId).apply {
+
         // Add the metadata fot the currently playing track
         setContentTitle(description.title)
         setContentText(description.subtitle)
@@ -65,5 +68,15 @@ fun myMusicServiceNotificationBuilder(
                 )
             )
         )
+    }
+
+    private suspend fun retrieveBitmapFromUri(uri: Uri): Bitmap {
+        return withContext(dispatchersProvider.io()) {
+            Glide.with(context).applyDefaultRequestOptions(glideOptions)
+                .asBitmap()
+                .load(uri)
+                .submit(NOTIFICATION_ICON_SIZE, NOTIFICATION_ICON_SIZE)
+                .get()
+        }
     }
 }
