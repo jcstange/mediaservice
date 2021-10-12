@@ -293,7 +293,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     .setMediaId(it.id)
                     .setIconUri(Uri.parse(it.image))
                     .setMediaUri(Uri.parse(it.source))
+                    .setExtras(Bundle().apply {
+
+                    })
                     .build()
+
                 MediaItem(mediaDescription, FLAG_PLAYABLE)
             }
             mediaItems = mediaDescriptionList.toMutableList()
